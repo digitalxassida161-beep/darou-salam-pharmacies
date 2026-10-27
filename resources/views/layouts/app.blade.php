@@ -371,7 +371,16 @@
                 <a href="{{ route('ventes.index') }}">Ventes</a>
 
                 <a href="{{ route('reports.sales') }}">Rapports des ventes</a>
+                  
 
+
+
+
+                  @if(auth()->check() && auth()->user()->role === 'admin')
+    <a href="{{ route('utilisateurs.index') }}">
+        Gestion des utilisateurs
+    </a>
+@endif
                 <form method="POST"
                       action="{{ route('logout') }}"
                       class="inline">

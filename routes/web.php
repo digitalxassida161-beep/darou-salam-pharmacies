@@ -10,7 +10,7 @@ use App\Http\Controllers\LotController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SalesReportController;
 use App\Http\Middleware\AdminMiddleware;
-
+use App\Http\Controllers\UserController;
 /*
 |--------------------------------------------------------------------------
 | Page d'accueil
@@ -85,4 +85,22 @@ Route::middleware('auth')->group(function () {
     // Rapports accessibles aux utilisateurs connectés
 Route::get('/rapports/ventes', [SalesReportController::class, 'index'])
     ->name('reports.sales');
+});
+
+// Gestion des utilisateurs : administrateurs uniquement
+Route::middleware(AdminMiddleware::class)->group(function () {
+    Route::resource('utilisateurs', UserController::class)
+        ->except(['show']);
+});
+
+
+
+Route::middleware('auth')->group(function () {
+
+    // Les autres routes de l'application restent ici.
+
+    Route::middleware(AdminMiddleware::class)->group(function () {
+        Route::resource('utilisateurs', UserController::class)
+            ->except(['show']);
+    });
 });
