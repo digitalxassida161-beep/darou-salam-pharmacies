@@ -1,0 +1,45 @@
+ .gitignore                                                                              |   2 [32m+[m
+ app/Http/Controllers/Admin/LicenseController.php                                        | 165 [32m++++++++++++++++[m
+ app/Http/Controllers/Admin/SubscriptionPaymentController.php                            |  98 [32m++++++++++[m
+ app/Http/Controllers/AuthController.php                                                 |  69 [32m++++++[m[31m-[m
+ app/Http/Controllers/DashboardController.php                                            |  86 [32m+++++++[m[31m--[m
+ app/Http/Controllers/LotController.php                                                  | 183 [32m+++++++++++++++++[m[31m-[m
+ app/Http/Controllers/MedicineController.php                                             |  86 [32m+++++++[m[31m--[m
+ app/Http/Controllers/RegistrationController.php                                         |  65 [32m+++++++[m
+ app/Http/Controllers/SaleController.php                                                 | 122 [32m++++++++++[m[31m--[m
+ app/Http/Controllers/SalesReportController.php                                          |  41 [32m++[m[31m--[m
+ app/Http/Controllers/UserController.php                                                 | 133 [32m++++++++++[m[31m---[m
+ app/Http/Middleware/CheckPharmacySubscription.php                                       |  45 [32m+++++[m
+ app/Http/Middleware/SuperAdminMiddleware.php                                            |  19 [32m++[m
+ app/Models/License.php                                                                  |  35 [32m++++[m
+ app/Models/Medicine.php                                                                 |  16 [32m+[m[31m-[m
+ app/Models/MedicineLot.php                                                              |  11 [32m+[m[31m-[m
+ app/Models/Sale.php                                                                     |  13 [32m+[m[31m-[m
+ app/Models/SubscriptionPayment.php                                                      |  41 [32m++++[m
+ app/Models/User.php                                                                     |  30 [32m++[m[31m-[m
+ bootstrap/app.php                                                                       |   8 [32m+[m
+ database/migrations/2026_10_27_195804_create_licenses_table.php                         |  37 [32m++++[m
+ database/migrations/2026_10_27_202840_add_license_id_to_users_table.php                 |  28 [32m+++[m
+ database/migrations/2026_10_27_202846_add_license_id_to_medicines_table.php             |  27 [32m+++[m
+ database/migrations/2026_10_27_202853_add_license_id_to_medicine_lots_table.php         |  27 [32m+++[m
+ database/migrations/2026_10_27_202902_add_license_id_to_sales_table.php                 |  27 [32m+++[m
+ database/migrations/2026_10_27_202910_add_license_id_to_stock_movements_table.php       |  27 [32m+++[m
+ database/migrations/2026_10_28_121907_add_subscription_expires_at_to_licenses_table.php |  25 [32m+++[m
+ database/migrations/2026_10_28_122704_create_subscription_payments_table.php            |  41 [32m++++[m
+ database/migrations/2026_10_28_130553_add_logo_to_licenses_table.php                    |  23 [32m+++[m
+ isAdmin()                                                                               |   0
+ public/images/Logo.png                                                                  | Bin [31m566575[m -> [32m1181660[m bytes
+ public/images/Logo1.png                                                                 | Bin [31m0[m -> [32m566575[m bytes
+ public/images/logo-comico4.png                                                          | Bin [31m0[m -> [32m1350104[m bytes
+ resources/views/admin/licenses/create.blade.php                                         | 307 [32m+++++++++++++++++++++++++++++[m
+ resources/views/admin/licenses/edit.blade.php                                           | 163 [32m++++++++++++++++[m
+ resources/views/admin/licenses/index.blade.php                                          | 671 [32m+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++[m
+ resources/views/admin/subscription-payments/create.blade.php                            | 106 [32m++++++++++[m
+ resources/views/auth/register.blade.php                                                 | 130 [32m+++++++++++++[m
+ resources/views/dashboard.blade.php                                                     | 137 [32m++++++++++[m[31m---[m
+ resources/views/layouts/app.blade.php                                                   | 487 [32m+++++++++++++++++++++++++++++[m[31m-----------------[m
+ resources/views/lots/index.blade.php                                                    | 757 [32m++++++++++++++++++++++++++++++++++++++++++++++++++++++[m[31m------------------[m
+ resources/views/medicines/index.blade.php                                               | 229 [32m++++++++[m[31m--------------[m
+ resources/views/subscription/expired.blade.php                                          |  42 [32m++++[m
+ routes/web.php                                                                          | 119 [32m+++++++[m[31m-----[m
+ 44 files changed, 3988 insertions(+), 690 deletions(-)
