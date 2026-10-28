@@ -1,8 +1,13 @@
-@extends('layouts.app')
+ @extends('layouts.app')
 
 @section('title', 'Gestion des médicaments')
 
 @section('content')
+@php
+    $isAdmin = auth()->check() && auth()->user()->role === 'admin';
+    $columnCount = $isAdmin ? 7 : 6;
+@endphp
+
 <div class="medicine-page">
 
     {{-- En-tête --}}
@@ -13,10 +18,12 @@
             <p>Consultez les produits, surveillez les stocks et gérez votre catalogue.</p>
         </div>
 
-        <a href="{{ route('medicaments.create') }}" class="medicine-add-btn">
-            <span class="add-icon">+</span>
-            Ajouter un médicament
-        </a>
+        @if($isAdmin)
+            <a href="{{ route('medicaments.create') }}" class="medicine-add-btn">
+                <span class="add-icon">+</span>
+                Ajouter un médicament
+            </a>
+        @endif
     </div>
 
     {{-- Indicateurs --}}
@@ -35,7 +42,11 @@
             <div>
                 <div class="stat-label">Produits actifs</div>
                 <div class="stat-number">
-                    {{ \App\Models\Medicine::where('active', true)->count() }}
+                   {{
+    \App\Models\Medicine::where('license_id', auth()->user()->license_id)
+        ->where('active', true)
+        ->count()
+}}
                 </div>
                 <div class="stat-description">Disponibles dans le catalogue</div>
             </div>
@@ -46,26 +57,23 @@
             <div>
                 <div class="stat-label">Stock à surveiller</div>
                 <div class="stat-number">
-                    {{ \App\Models\Medicine::where('active', true)
-                        ->whereRaw('minimum_stock > 0')
-                        ->count() > 0
-                        ? $medicines->getCollection()->filter(function ($m) {
-                            return $m->active && (int) $m->stock_total <= (int) $m->minimum_stock;
-                        })->count()
-                        : 0 }}
+                    {{ $medicines->getCollection()->filter(function ($m) {
+                        return $m->active && (int) $m->stock_total <= (int) $m->minimum_stock;
+                    })->count() }}
                 </div>
                 <div class="stat-description">Parmi les produits de cette page</div>
             </div>
         </div>
     </div>
 
-    {{-- Recherche et filtres côté navigateur --}}
+    {{-- Recherche et filtres --}}
     <div class="medicine-panel">
         <div class="medicine-toolbar">
             <div>
                 <h2>Catalogue des médicaments</h2>
                 <p>Recherchez un produit ou filtrez selon son état.</p>
             </div>
+
             <div class="medicine-count">
                 {{ $medicines->total() }} produit(s)
             </div>
@@ -74,20 +82,19 @@
         <div class="medicine-filters">
             <div class="medicine-search">
                 <span aria-hidden="true">⌕</span>
-                <input type="search" id="medicineSearch"
+                <input type="search"
+                       id="medicineSearch"
                        placeholder="Rechercher par nom, forme ou dosage..."
                        aria-label="Rechercher un médicament">
             </div>
 
-            <select id="medicineStatus" class="medicine-select"
-                    aria-label="Filtrer par état">
+            <select id="medicineStatus" class="medicine-select" aria-label="Filtrer par état">
                 <option value="all">Tous les états</option>
                 <option value="active">Actifs</option>
                 <option value="archived">Archivés</option>
             </select>
 
-            <select id="medicineStock" class="medicine-select"
-                    aria-label="Filtrer par stock">
+            <select id="medicineStock" class="medicine-select" aria-label="Filtrer par stock">
                 <option value="all">Tous les stocks</option>
                 <option value="low">Stock faible</option>
                 <option value="ok">Stock suffisant</option>
@@ -104,14 +111,17 @@
                         <th>Stock valide</th>
                         <th>Seuil minimum</th>
                         <th>État</th>
-                        <th class="actions-heading">Actions</th>
+
+                        @if($isAdmin)
+                            <th class="actions-heading">Actions</th>
+                        @endif
                     </tr>
                 </thead>
 
                 <tbody id="medicineTableBody">
                     @forelse($medicines as $m)
                         <tr class="medicine-row"
-                            data-search="{{ strtolower($m->name.' '.$m->form.' '.$m->strength) }}"
+                            data-search="{{ strtolower(($m->name ?? '').' '.($m->form ?? '').' '.($m->strength ?? '')) }}"
                             data-status="{{ $m->active ? 'active' : 'archived' }}"
                             data-stock="{{ (int) $m->stock_total <= (int) $m->minimum_stock ? 'low' : 'ok' }}">
 
@@ -165,45 +175,51 @@
                                 @endif
                             </td>
 
-                            <td>
-                                <div class="medicine-actions">
-                                    <a class="action-edit"
-                                       href="{{ route('medicaments.edit', $m) }}"
-                                       title="Modifier ce médicament">
-                                        Modifier
-                                    </a>
+                            @if($isAdmin)
+                                <td>
+                                    <div class="medicine-actions">
+                                        <a class="action-edit"
+                                           href="{{ route('medicaments.edit', $m) }}"
+                                           title="Modifier ce médicament">
+                                            Modifier
+                                        </a>
 
-                                    @if($m->active)
-                                        <form method="POST"
-                                              action="{{ route('medicaments.destroy', $m) }}"
-                                              onsubmit="return confirm('Voulez-vous vraiment archiver ce médicament ? Il ne sera plus disponible à la vente, mais son historique sera conservé.');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="action-archive">
-                                                Archiver
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
-                            </td>
+                                        @if($m->active)
+                                            <form method="POST"
+                                                  action="{{ route('medicaments.destroy', $m) }}"
+                                                  onsubmit="return confirm('Voulez-vous vraiment archiver ce médicament ? Son historique sera conservé.');">
+                                                @csrf
+                                                @method('DELETE')
+
+                                                <button type="submit" class="action-archive">
+                                                    Archiver
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
+                                </td>
+                            @endif
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7">
+                            <td colspan="{{ $columnCount }}">
                                 <div class="medicine-empty">
                                     <div class="empty-symbol">▤</div>
                                     <h3>Aucun médicament enregistré</h3>
-                                    <p>Commencez par ajouter votre premier médicament au catalogue.</p>
-                                    <a href="{{ route('medicaments.create') }}" class="medicine-add-btn">
-                                        + Ajouter un médicament
-                                    </a>
+                                    <p>Il n'y a actuellement aucun médicament dans le catalogue.</p>
+
+                                    @if($isAdmin)
+                                        <a href="{{ route('medicaments.create') }}" class="medicine-add-btn">
+                                            + Ajouter un médicament
+                                        </a>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
                     @endforelse
 
                     <tr id="medicineNoResult" style="display:none">
-                        <td colspan="7" class="medicine-no-result">
+                        <td colspan="{{ $columnCount }}" class="medicine-no-result">
                             Aucun médicament ne correspond à votre recherche.
                         </td>
                     </tr>
@@ -211,12 +227,14 @@
             </table>
         </div>
 
+        {{-- Pagination --}}
         @if($medicines->hasPages())
             <div class="medicine-pagination">
                 <div class="pagination-info">
                     Affichage de {{ $medicines->firstItem() }} à {{ $medicines->lastItem() }}
                     sur {{ $medicines->total() }} médicament(s)
                 </div>
+
                 <div>{{ $medicines->links() }}</div>
             </div>
         @endif
@@ -294,10 +312,7 @@
         transform: translateY(-1px);
     }
 
-    .add-icon {
-        font-size: 21px;
-        line-height: 15px;
-    }
+    .add-icon { font-size: 21px; line-height: 15px; }
 
     .medicine-stats {
         display: grid;
@@ -334,11 +349,7 @@
     .stat-icon-blue { color: #3864ad; background: #edf2ff; }
     .stat-icon-orange { color: #b66b13; background: #fff3e3; }
 
-    .stat-label {
-        color: var(--med-muted);
-        font-size: 11px;
-        font-weight: 700;
-    }
+    .stat-label { color: var(--med-muted); font-size: 11px; font-weight: 700; }
 
     .stat-number {
         color: var(--med-text);
@@ -348,11 +359,7 @@
         margin-top: 3px;
     }
 
-    .stat-description {
-        color: #97a2af;
-        font-size: 10px;
-        margin-top: 2px;
-    }
+    .stat-description { color: #97a2af; font-size: 10px; margin-top: 2px; }
 
     .medicine-panel {
         background: #fff;
@@ -370,11 +377,7 @@
         padding: 22px 22px 18px;
     }
 
-    .medicine-toolbar h2 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 800;
-    }
+    .medicine-toolbar h2 { margin: 0; font-size: 16px; font-weight: 800; }
 
     .medicine-toolbar p {
         margin: 6px 0 0;
@@ -476,7 +479,6 @@
     }
 
     .medicine-table tbody tr:last-child td { border-bottom: 0; }
-
     .medicine-table tbody tr:hover td { background: #fafcfb; }
 
     .medicine-name-cell {
@@ -507,28 +509,11 @@
         overflow-wrap: anywhere;
     }
 
-    .medicine-subtitle {
-        margin-top: 4px;
-        color: #96a1af;
-        font-size: 10px;
-    }
+    .medicine-subtitle { margin-top: 4px; color: #96a1af; font-size: 10px; }
+    .medicine-form { color: #435267; font-weight: 700; }
+    .medicine-strength { color: #929eac; font-size: 10px; margin-top: 4px; }
 
-    .medicine-form {
-        color: #435267;
-        font-weight: 700;
-    }
-
-    .medicine-strength {
-        color: #929eac;
-        font-size: 10px;
-        margin-top: 4px;
-    }
-
-    .medicine-price {
-        color: #183e35;
-        font-weight: 800;
-        white-space: nowrap;
-    }
+    .medicine-price { color: #183e35; font-weight: 800; white-space: nowrap; }
 
     .medicine-price span {
         display: block;
@@ -549,7 +534,6 @@
 
     .stock-ok { background: #e8f5ed; color: #247346; }
     .stock-low { background: #fff0df; color: #a65b13; }
-
     .threshold-cell { color: #627185; }
 
     .medicine-status {
@@ -573,24 +557,12 @@
     .status-active { background: #e8f5ed; color: #247346; }
     .status-archived { background: #eef1f4; color: #6d7784; }
 
-    .stock-warning {
-        margin-top: 6px;
-        color: #a65b13;
-        font-size: 10px;
-        font-weight: 700;
-    }
+    .stock-warning { margin-top: 6px; color: #a65b13; font-size: 10px; font-weight: 700; }
 
-    .medicine-actions {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        flex-wrap: wrap;
-    }
-
+    .medicine-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
     .medicine-actions form { margin: 0; }
 
-    .action-edit,
-    .action-archive {
+    .action-edit, .action-archive {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -604,26 +576,12 @@
         white-space: nowrap;
     }
 
-    .action-edit {
-        background: #edf3ff;
-        color: #355ba1 !important;
-        border: 1px solid #dce7ff;
-    }
-
+    .action-edit { background: #edf3ff; color: #355ba1 !important; border: 1px solid #dce7ff; }
     .action-edit:hover { background: #dfe9ff; }
-
-    .action-archive {
-        background: #fff;
-        color: #b4534b;
-        border: 1px solid #f0d8d5;
-    }
-
+    .action-archive { background: #fff; color: #b4534b; border: 1px solid #f0d8d5; }
     .action-archive:hover { background: #fff1f0; }
 
-    .medicine-empty {
-        padding: 45px 15px;
-        text-align: center;
-    }
+    .medicine-empty { padding: 45px 15px; text-align: center; }
 
     .empty-symbol {
         margin: 0 auto 13px;
@@ -638,23 +596,9 @@
         font-size: 26px;
     }
 
-    .medicine-empty h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 800;
-    }
-
-    .medicine-empty p {
-        margin: 8px 0 18px;
-        color: var(--med-muted);
-        font-size: 12px;
-    }
-
-    .medicine-no-result {
-        text-align: center;
-        padding: 30px !important;
-        color: var(--med-muted);
-    }
+    .medicine-empty h3 { margin: 0; font-size: 16px; font-weight: 800; }
+    .medicine-empty p { margin: 8px 0 18px; color: var(--med-muted); font-size: 12px; }
+    .medicine-no-result { text-align: center; padding: 30px !important; color: var(--med-muted); }
 
     .medicine-pagination {
         display: flex;
@@ -666,11 +610,7 @@
         padding: 15px 22px;
     }
 
-    .pagination-info {
-        color: var(--med-muted);
-        font-size: 11px;
-    }
-
+    .pagination-info { color: var(--med-muted); font-size: 11px; }
     .medicine-pagination nav p { margin-bottom: 0; }
     .medicine-pagination nav { margin: 0; }
 
@@ -721,6 +661,7 @@
                 const show = matchesSearch && matchesStatus && matchesStock;
 
                 row.style.display = show ? '' : 'none';
+
                 if (show) visible++;
             });
 

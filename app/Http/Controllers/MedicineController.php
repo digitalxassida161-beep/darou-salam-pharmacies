@@ -7,42 +7,102 @@ use Illuminate\Http\Request;
 
 class MedicineController extends Controller
 {
+    /**
+     * Médicaments de la pharmacie connectée uniquement.
+     */
+    private function pharmacyMedicines()
+    {
+        $licenseId = auth()->user()->license_id;
+
+        abort_if(!$licenseId, 403, 'Aucune pharmacie associée à ce compte.');
+
+        return Medicine::where('license_id', $licenseId);
+    }
+
     public function index()
     {
-        $medicines = Medicine::withSum(['lots as stock_total' => function ($q) {
-            $q->whereDate('expiry_date', '>=', today());
-        }], 'quantity')->orderBy('name')->paginate(20);
+        $medicines = $this->pharmacyMedicines()
+            ->withSum(['lots as stock_total' => function ($q) {
+                $q->whereDate('expiry_date', '>=', today());
+            }], 'quantity')
+            ->orderBy('name')
+            ->paginate(20);
 
         return view('medicines.index', compact('medicines'));
     }
 
-    public function create() { return view('medicines.create', ['medicine' => new Medicine()]); }
+    public function create()
+    {
+        return view('medicines.create', [
+            'medicine' => new Medicine()
+        ]);
+    }
 
     public function store(Request $request)
     {
         $data = $this->validated($request);
-        Medicine::create($data);
-        return redirect()->route('medicaments.index')->with('success', 'Médicament ajouté.');
+
+        // La pharmacie est déterminée par le compte connecté,
+        // jamais par un champ envoyé depuis le formulaire.
+        $data['license_id'] = auth()->user()->license_id;
+
+        $this->pharmacyMedicines()->create($data);
+
+        return redirect()
+            ->route('medicaments.index')
+            ->with('success', 'Médicament ajouté.');
     }
 
     public function edit(Medicine $medicament)
     {
-        return view('medicines.create', ['medicine' => $medicament]);
+        $this->authorizePharmacy($medicament);
+
+        return view('medicines.create', [
+            'medicine' => $medicament
+        ]);
     }
 
     public function update(Request $request, Medicine $medicament)
     {
+        $this->authorizePharmacy($medicament);
+
         $medicament->update($this->validated($request));
-        return redirect()->route('medicaments.index')->with('success', 'Médicament modifié.');
+
+        return redirect()
+            ->route('medicaments.index')
+            ->with('success', 'Médicament modifié.');
     }
 
     public function destroy(Medicine $medicament)
     {
-        if ($medicament->lots()->where('quantity', '>', 0)->exists()) {
-            return back()->withErrors(['stock' => 'Impossible d’archiver ce médicament : son stock n’est pas nul.']);
+        $this->authorizePharmacy($medicament);
+
+        $hasValidStock = $medicament->lots()
+            ->where('quantity', '>', 0)
+            ->whereDate('expiry_date', '>=', today())
+            ->exists();
+
+        if ($hasValidStock) {
+            return back()->withErrors([
+                'stock' => 'Impossible d’archiver ce médicament : il possède encore un lot valide en stock.'
+            ]);
         }
+
         $medicament->update(['active' => false]);
-        return redirect()->route('medicaments.index')->with('success', 'Médicament archivé.');
+
+        return redirect()
+            ->route('medicaments.index')
+            ->with('success', 'Médicament archivé.');
+    }
+
+    private function authorizePharmacy(Medicine $medicament): void
+    {
+        abort_if(
+            !$medicament->license_id ||
+            $medicament->license_id !== auth()->user()->license_id,
+            403,
+            'Ce médicament n’appartient pas à votre pharmacie.'
+        );
     }
 
     private function validated(Request $request): array
@@ -56,6 +116,8 @@ class MedicineController extends Controller
             'sale_price' => ['required', 'numeric', 'min:0'],
             'minimum_stock' => ['required', 'integer', 'min:0'],
             'active' => ['nullable', 'boolean'],
-        ]) + ['active' => $request->boolean('active', true)];
+        ]) + [
+            'active' => $request->boolean('active', true)
+        ];
     }
 }

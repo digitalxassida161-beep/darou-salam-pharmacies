@@ -7,11 +7,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MedicineLot extends Model
 {
-    protected $fillable = ['medicine_id', 'lot_number', 'expiry_date', 'quantity', 'purchase_price', 'supplier'];
+    protected $fillable = [
+        'license_id',
+        'medicine_id',
+        'lot_number',
+        'expiry_date',
+        'quantity',
+        'purchase_price',
+        'supplier',
+    ];
 
     protected $casts = [
         'expiry_date' => 'date',
         'purchase_price' => 'decimal:2',
+        'quantity' => 'integer',
     ];
 
     public function medicine(): BelongsTo

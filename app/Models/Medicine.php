@@ -7,7 +7,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Medicine extends Model
 {
-    protected $fillable = ['name', 'form', 'strength', 'category', 'unit', 'sale_price', 'minimum_stock', 'active'];
+    protected $fillable = [
+        'license_id',
+        'name',
+        'form',
+        'strength',
+        'category',
+        'unit',
+        'sale_price',
+        'minimum_stock',
+        'active',
+    ];
 
     protected $casts = [
         'sale_price' => 'decimal:2',
@@ -21,6 +31,8 @@ class Medicine extends Model
 
     public function getStockAttribute(): int
     {
-        return (int) $this->lots()->where('expiry_date', '>=', now()->toDateString())->sum('quantity');
+        return (int) $this->lots()
+            ->whereDate('expiry_date', '>=', today())
+            ->sum('quantity');
     }
 }

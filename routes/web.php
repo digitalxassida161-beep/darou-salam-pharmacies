@@ -2,15 +2,18 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MedicineController;
 use App\Http\Controllers\LotController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SalesReportController;
-use App\Http\Middleware\AdminMiddleware;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\Admin\LicenseController;
+use App\Http\Controllers\Admin\SubscriptionPaymentController;
+use App\Http\Middleware\AdminMiddleware;
+use App\Http\Middleware\SuperAdminMiddleware;
+use App\Http\Controllers\RegistrationController;
 /*
 |--------------------------------------------------------------------------
 | Page d'accueil
@@ -25,10 +28,16 @@ Route::get('/', function () {
 
 /*
 |--------------------------------------------------------------------------
-| Connexion : utilisateurs non connectés
+| Connexion
 |--------------------------------------------------------------------------
 */
+Route::get('/inscription', [RegistrationController::class, 'create'])
+    ->name('register');
 
+Route::post('/inscription', [RegistrationController::class, 'store'])
+    ->name('register.store');
+
+    
 Route::middleware('guest')->group(function () {
     Route::get('/connexion', [AuthController::class, 'showLogin'])
         ->name('login');
@@ -39,68 +48,72 @@ Route::middleware('guest')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Espace sécurisé : utilisateurs connectés
+| Espace réservé aux utilisateurs connectés
 |--------------------------------------------------------------------------
 */
 
 Route::middleware('auth')->group(function () {
 
-    // Tableau de bord
-    Route::get('/dashboard', [DashboardController::class, 'index'])
-        ->name('dashboard');
-
-    // Déconnexion
     Route::post('/deconnexion', [AuthController::class, 'logout'])
         ->name('logout');
 
-    // Gestion des médicaments
-    Route::resource('medicaments', MedicineController::class)
-        ->except(['show']);
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
 
-    // Gestion des lots et des entrées de stock
-    Route::prefix('lots')->name('lots.')->group(function () {
-        Route::get('/', [LotController::class, 'index'])
-            ->name('index');
+    /*
+    |--------------------------------------------------------------------------
+    | Fonctionnalités avec abonnement valide
+    |--------------------------------------------------------------------------
+    */
 
-        Route::get('/nouveau', [LotController::class, 'create'])
-            ->name('create');
+    Route::middleware('subscription')->group(function () {
 
-        Route::post('/', [LotController::class, 'store'])
-            ->name('store');
-    });
-
-    // Gestion des ventes
-    Route::prefix('ventes')->name('ventes.')->group(function () {
-        Route::get('/', [SaleController::class, 'index'])
-            ->name('index');
-
-        Route::get('/nouvelle', [SaleController::class, 'create'])
-            ->name('create');
-
-        Route::post('/', [SaleController::class, 'store'])
-            ->name('store');
-    });
-
-    // Rapports réservés à l'administrateur
-    // Rapports accessibles aux utilisateurs connectés
-Route::get('/rapports/ventes', [SalesReportController::class, 'index'])
-    ->name('reports.sales');
-});
-
-// Gestion des utilisateurs : administrateurs uniquement
-Route::middleware(AdminMiddleware::class)->group(function () {
-    Route::resource('utilisateurs', UserController::class)
-        ->except(['show']);
-});
-
-
-
-Route::middleware('auth')->group(function () {
-
-    // Les autres routes de l'application restent ici.
-
-    Route::middleware(AdminMiddleware::class)->group(function () {
-        Route::resource('utilisateurs', UserController::class)
+        Route::resource('medicaments', MedicineController::class)
             ->except(['show']);
+
+        Route::prefix('lots')->name('lots.')->group(function () {
+            Route::get('/', [LotController::class, 'index'])->name('index');
+            Route::get('/nouveau', [LotController::class, 'create'])->name('create');
+            Route::post('/', [LotController::class, 'store'])->name('store');
+        });
+
+        Route::prefix('ventes')->name('ventes.')->group(function () {
+            Route::get('/', [SaleController::class, 'index'])->name('index');
+            Route::get('/nouvelle', [SaleController::class, 'create'])->name('create');
+            Route::post('/', [SaleController::class, 'store'])->name('store');
+        });
+
+        Route::get('/rapports/ventes', [SalesReportController::class, 'index'])
+            ->name('reports.sales');
+
+        Route::middleware(AdminMiddleware::class)->group(function () {
+            Route::resource('utilisateurs', UserController::class)
+                ->except(['show']);
+        });
     });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Administration centrale : Super Admin uniquement
+    |--------------------------------------------------------------------------
+    */
+
+    Route::middleware(SuperAdminMiddleware::class)
+        ->prefix('admin')
+        ->name('admin.')
+        ->group(function () {
+
+            Route::resource('licenses', LicenseController::class)
+                ->except(['show', 'destroy']);
+
+            Route::get(
+                'licenses/{license}/payments/create',
+                [SubscriptionPaymentController::class, 'create']
+            )->name('licenses.payments.create');
+
+            Route::post(
+                'licenses/{license}/payments',
+                [SubscriptionPaymentController::class, 'store']
+            )->name('licenses.payments.store');
+        });
 });

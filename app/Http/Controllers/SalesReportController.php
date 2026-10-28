@@ -11,10 +11,16 @@ class SalesReportController extends Controller
 {
     public function index(Request $request)
     {
-        $period = $request->input('period', 'day');
+        $user = auth()->user();
+        $licenseId = $user->license_id;
 
-        $start = null;
-        $end = null;
+        abort_if(
+            !$licenseId,
+            403,
+            'Aucune pharmacie associée à ce compte.'
+        );
+
+        $period = $request->input('period', 'day');
 
         switch ($period) {
             case 'month':
@@ -28,6 +34,15 @@ class SalesReportController extends Controller
                 break;
 
             case 'custom':
+                $request->validate([
+                    'start_date' => ['nullable', 'date'],
+                    'end_date' => [
+                        'nullable',
+                        'date',
+                        'after_or_equal:start_date',
+                    ],
+                ]);
+
                 $start = $request->filled('start_date')
                     ? Carbon::parse($request->start_date)->startOfDay()
                     : Carbon::today();
@@ -46,33 +61,30 @@ class SalesReportController extends Controller
 
         if ($start->gt($end)) {
             return back()->withInput()->withErrors([
-                'start_date' => 'La date de début doit être antérieure à la date de fin.',
+                'start_date' =>
+                    'La date de début doit être antérieure à la date de fin.',
             ]);
         }
 
-        // Base du rapport : ventes de la période choisie.
-        $salesQuery = Sale::query()
+        // Base commune : ventes de la pharmacie connectée.
+        $salesQuery = Sale::where('license_id', $licenseId)
             ->whereBetween('created_at', [$start, $end]);
 
-        // Un administrateur voit toutes les ventes.
-        // Les autres utilisateurs voient uniquement leurs propres ventes.
-        if (!auth()->user()->isAdmin()) {
-            $salesQuery->where('user_id', auth()->id());
+        // Le caissier ne voit que les ventes qu'il a enregistrées.
+        if ($user->role === 'caissier') {
+            $salesQuery->where('user_id', $user->id);
         }
 
-        // Historique des ventes visibles par cet utilisateur.
+        // Les statistiques utilisent exactement le même périmètre.
         $sales = (clone $salesQuery)
             ->with(['items.medicine', 'user'])
             ->latest()
             ->get();
 
-        // Nombre de ventes.
         $totalSales = (clone $salesQuery)->count();
 
-        // Montant total des ventes.
         $totalAmount = (clone $salesQuery)->sum('total_amount');
 
-        // Répartition des paiements.
         $paymentBreakdown = (clone $salesQuery)
             ->select(
                 'payment_method',
@@ -81,7 +93,6 @@ class SalesReportController extends Controller
             ->groupBy('payment_method')
             ->get();
 
-        // Totaux par jour.
         $dailyTotals = (clone $salesQuery)
             ->select(
                 DB::raw('DATE(created_at) as sale_date'),

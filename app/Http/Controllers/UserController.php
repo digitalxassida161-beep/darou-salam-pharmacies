@@ -5,16 +5,45 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
     /**
-     * Afficher la liste des utilisateurs.
+     * Récupérer l'identifiant de la pharmacie de l'administrateur connecté.
+     */
+    private function licenseId(): int
+    {
+        $user = auth()->user();
+
+        if (!$user || $user->role !== 'admin' || !$user->license_id) {
+            abort(403, 'Accès réservé à l’administrateur de la pharmacie.');
+        }
+
+        return (int) $user->license_id;
+    }
+
+    /**
+     * Vérifier que l'utilisateur appartient à la pharmacie connectée.
+     */
+    private function verifierPharmacie(User $utilisateur): void
+    {
+        abort_unless(
+            (int) $utilisateur->license_id === $this->licenseId(),
+            404
+        );
+    }
+
+    /**
+     * Afficher uniquement les utilisateurs de la pharmacie connectée.
      */
     public function index()
     {
-        $users = User::orderBy('name')->paginate(15);
+        $licenseId = $this->licenseId();
+
+        $users = User::where('license_id', $licenseId)
+            ->whereIn('role', ['admin', 'caissier'])
+            ->orderBy('name')
+            ->paginate(15);
 
         return view('utilisateurs.index', compact('users'));
     }
@@ -24,19 +53,36 @@ class UserController extends Controller
      */
     public function create()
     {
+        $this->licenseId();
+
         return view('utilisateurs.create');
     }
 
     /**
-     * Enregistrer un nouvel utilisateur.
+     * Créer un utilisateur dans la pharmacie connectée.
      */
     public function store(Request $request)
     {
+        $licenseId = $this->licenseId();
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', Rule::in(['admin', 'caissier'])],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                'unique:users,email',
+            ],
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+            ],
+            'role' => [
+                'required',
+                Rule::in(['admin', 'caissier']),
+            ],
         ]);
 
         User::create([
@@ -44,6 +90,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => $validated['password'],
             'role' => $validated['role'],
+            'license_id' => $licenseId,
         ]);
 
         return redirect()
@@ -56,14 +103,30 @@ class UserController extends Controller
      */
     public function edit(User $utilisateur)
     {
+        $this->verifierPharmacie($utilisateur);
+
+        abort_if(
+            !in_array($utilisateur->role, ['admin', 'caissier'], true),
+            404
+        );
+
         return view('utilisateurs.edit', compact('utilisateur'));
     }
 
     /**
-     * Mettre à jour un utilisateur.
+     * Modifier uniquement un utilisateur de la même pharmacie.
      */
     public function update(Request $request, User $utilisateur)
     {
+        $licenseId = $this->licenseId();
+
+        $this->verifierPharmacie($utilisateur);
+
+        abort_if(
+            !in_array($utilisateur->role, ['admin', 'caissier'], true),
+            404
+        );
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => [
@@ -72,8 +135,16 @@ class UserController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($utilisateur->id),
             ],
-            'role' => ['required', Rule::in(['admin', 'caissier'])],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            'role' => [
+                'required',
+                Rule::in(['admin', 'caissier']),
+            ],
+            'password' => [
+                'nullable',
+                'string',
+                'min:8',
+                'confirmed',
+            ],
         ]);
 
         // Empêcher un administrateur de retirer son propre rôle.
@@ -88,15 +159,17 @@ class UserController extends Controller
                 ->withInput();
         }
 
-        // Ne pas rétrograder le dernier administrateur.
+        // Compter uniquement les administrateurs de cette pharmacie.
         if (
             $utilisateur->role === 'admin'
             && $validated['role'] !== 'admin'
-            && User::where('role', 'admin')->count() <= 1
+            && User::where('license_id', $licenseId)
+                ->where('role', 'admin')
+                ->count() <= 1
         ) {
             return back()
                 ->withErrors([
-                    'role' => 'Impossible de rétrograder le dernier administrateur.',
+                    'role' => 'Impossible de rétrograder le dernier administrateur de cette pharmacie.',
                 ])
                 ->withInput();
         }
@@ -105,7 +178,6 @@ class UserController extends Controller
         $utilisateur->email = $validated['email'];
         $utilisateur->role = $validated['role'];
 
-        // Le mot de passe n'est modifié que si un nouveau mot de passe est fourni.
         if (!empty($validated['password'])) {
             $utilisateur->password = $validated['password'];
         }
@@ -118,27 +190,36 @@ class UserController extends Controller
     }
 
     /**
-     * Supprimer un utilisateur.
+     * Supprimer uniquement un utilisateur de la même pharmacie.
      */
     public function destroy(User $utilisateur)
     {
+        $licenseId = $this->licenseId();
+
+        $this->verifierPharmacie($utilisateur);
+
+        abort_if(
+            !in_array($utilisateur->role, ['admin', 'caissier'], true),
+            404
+        );
+
         // Empêcher la suppression de son propre compte.
         if (auth()->id() === $utilisateur->id) {
-            return back()->with(
-                'error',
-                'Vous ne pouvez pas supprimer votre propre compte.'
-            );
+            return back()->withErrors([
+                'utilisateur' => 'Vous ne pouvez pas supprimer votre propre compte.',
+            ]);
         }
 
-        // Empêcher la suppression du dernier administrateur.
+        // Protéger le dernier administrateur de cette pharmacie.
         if (
             $utilisateur->role === 'admin'
-            && User::where('role', 'admin')->count() <= 1
+            && User::where('license_id', $licenseId)
+                ->where('role', 'admin')
+                ->count() <= 1
         ) {
-            return back()->with(
-                'error',
-                'Impossible de supprimer le dernier administrateur.'
-            );
+            return back()->withErrors([
+                'utilisateur' => 'Impossible de supprimer le dernier administrateur de cette pharmacie.',
+            ]);
         }
 
         $utilisateur->delete();
